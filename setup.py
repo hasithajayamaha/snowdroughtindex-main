@@ -1,0 +1,35 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="snowdroughtindex",
+    version="0.1.0",
+    packages=find_packages(),
+    install_requires=[
+        "numpy",
+        "pandas",
+        "xarray",
+        "netCDF4",
+        "scipy",
+        "matplotlib",
+        "seaborn",
+        "scikit-learn",
+        "geopandas",
+        "shapely",
+    ],
+    author="Snow Drought Index Team",
+    author_email="example@example.com",
+    description="A package for analyzing snow drought conditions using various indices and methods",
+    keywords="snow, drought, climate, hydrology, SWE",
+    url="https://github.com/example/snowdroughtindex",
+    classifiers=[
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering :: Atmospheric Science",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+    ],
+    python_requires=">=3.7",
+)
