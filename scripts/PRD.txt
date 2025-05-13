@@ -1,0 +1,96 @@
+<context>
+# Overview  
+The Snow Drought Index is a Python package designed to analyze and classify snow drought conditions using advanced methodologies and indices. It addresses the need for robust, reproducible, and extensible tools for hydrologists, climate scientists, and water resource managers to assess snow droughts, their impacts, and trends. The package is valuable for research, operational monitoring, and decision support in regions where snowpack is a critical water resource.
+
+# Core Features  
+- **Data Preprocessing**: Gap filling of SWE data using quantile mapping, linear interpolation, and artificial gap evaluation. Data extraction and filtering by geography.
+- **Snow Drought Analysis**: Calculation of Standardized Snow Water Equivalent Index (SSWEI), SWE/P ratio analysis, and drought classification (Heldmyer et al. 2022, Huning & AghaKouchak 2020). Elevation-based and basin-based analysis.
+- **Visualization**: Time series, spatial, and classification plots for SWE and drought indices. Data availability and performance evaluation visualizations.
+- **Advanced Analysis**: Snow Cover Seasonality (SCS) analysis, trend detection, and clustering. Support for case studies and custom workflows.
+- **Extensible Architecture**: Modular design with class-based implementations (SWEDataset, SSWEI, DroughtAnalysis), configuration management, and provenance tracking.
+- **CLI & API**: Command-line interface for all major workflows, with plans for RESTful API and dashboard integration.
+
+# User Experience  
+- **User Personas**: Hydrologists, climate scientists, water managers, researchers, and advanced students.
+- **Key User Flows**:
+  - Load and preprocess SWE data (NetCDF, HDF5, GeoTIFF, CSV)
+  - Fill data gaps and validate results
+  - Calculate SSWEI and classify droughts
+  - Visualize results and generate reports
+  - Run advanced analyses (trend, SCS, clustering)
+  - Use CLI for batch processing or integrate into Python workflows
+- **UI/UX Considerations**:
+  - Clear CLI with help and documentation
+  - Consistent function/class interfaces
+  - Output visualizations suitable for publication
+  - Planned: Interactive dashboards (Dash/Streamlit), automated reporting, and accessibility features
+</context>
+<PRD>
+# Technical Architecture  
+- **System Components**:
+  - Core modules: data_preparation, gap_filling, sswei, drought_classification, analysis, utils (visualization, statistics)
+  - Class-based APIs: SWEDataset, SSWEI, DroughtAnalysis, ProvenanceTracker, Configuration
+  - CLI: snowdroughtindex/cli.py for all major workflows
+  - Planned RESTful API (FastAPI) and dashboard integration
+- **Data Models**:
+  - SWE data as xarray.Dataset or pandas.DataFrame
+  - Station metadata as DataFrame/GeoDataFrame
+  - Configuration via YAML/JSON or Python objects
+  - Provenance and metadata tracking for reproducibility
+- **APIs and Integrations**:
+  - Input: NetCDF, HDF5, GeoTIFF, CSV
+  - Output: NetCDF, HDF5, CSV, PNG/JPG (plots)
+  - Planned: Cloud storage (S3, GCS, Azure), REST API, mobile-friendly endpoints
+- **Infrastructure Requirements**:
+  - Python 3.7+
+  - Dependencies: numpy, pandas, xarray, matplotlib, scipy, geopandas, seaborn, scikit-learn, netCDF4, statsmodels, properscoring, h5py, shapely
+  - Optional: Dask for parallel/lazy loading, CuPy for GPU acceleration (future)
+
+# Development Roadmap  
+- **Phase 1: Foundation Strengthening**
+  - Optimize memory and parallel processing
+  - Complete gap filling, SSWEI, and drought classification modules
+  - Robust I/O and metadata handling
+  - Expand CLI and add documentation
+  - Add basic spatial interpolation and uncertainty quantification
+- **Phase 2: Advanced Capabilities**
+  - GPU acceleration for core algorithms
+  - Machine learning for gap filling and prediction
+  - RESTful API and dashboard (Dash/Streamlit)
+  - Advanced trend, extreme value, and teleconnection analysis
+  - Automated reporting and accessibility features
+- **Phase 3: Ecosystem Integration**
+  - Cloud storage and processing pipelines
+  - Containerization (Docker)
+  - Mobile and web integration
+  - Policy, regulatory, and interdisciplinary extensions
+  - Community governance and sustainability
+
+# Logical Dependency Chain
+- Foundation: Data I/O, validation, and preprocessing
+- Core: Gap filling, SSWEI calculation, drought classification
+- Analysis: Visualization, trend/SCS analysis, case studies
+- Extensions: API, dashboard, cloud, ML, policy tools
+- Prioritize features that enable end-to-end workflows and visible results early (CLI, core analysis, basic plots)
+
+# Risks and Mitigations  
+- **Technical Challenges**: Large dataset handling, parallelization, and memory optimization. *Mitigation*: Use chunking, Dask, and memory-efficient algorithms.
+- **MVP Definition**: Scope creep from advanced features. *Mitigation*: Strict phase-based roadmap, clear MVP definition.
+- **Resource Constraints**: Limited contributors and compute resources. *Mitigation*: Modular design, open-source community, cloud integration.
+- **Data Quality**: Incomplete or inconsistent SWE data. *Mitigation*: Robust validation, gap filling, and provenance tracking.
+- **Sustainability**: Long-term maintenance and funding. *Mitigation*: Community governance, grant proposals, and partnerships.
+
+# Appendix  
+- **References**:
+  - Huning, L. S., & AghaKouchak, A. (2020). Global snow drought hot spots and characteristics. PNAS, 117(33), 19753-19759.
+  - Heldmyer, A., et al. (2022). Sensitivity of snowpack storage efficiency to precipitation and temperature using a regional snow drought index. HESS, 26(22), 5721-5735.
+  - Tang, G., et al. (2021). SC-earth: A station-based serially complete earth dataset from 1950 to 2019. J. Climate, 34(16), 6493-6511.
+- **Technical Specifications**:
+  - See README.md, setup.py, and core modules for details
+  - Modular, extensible Python package structure
+  - Comprehensive test suite (pytest)
+  - MIT License
+- **Research Findings**:
+  - Case studies: Bow River at Banff, elevation-based analysis
+  - Performance evaluation of gap filling and classification methods
+</PRD> 
