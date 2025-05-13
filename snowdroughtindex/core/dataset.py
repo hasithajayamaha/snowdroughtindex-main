@@ -12,9 +12,12 @@ import os
 import gc
 from typing import Dict, List, Tuple, Optional, Union, Any
 from functools import lru_cache
+import psutil
+from tqdm import tqdm
 
 from snowdroughtindex.core import data_preparation, gap_filling
 from snowdroughtindex.core.configuration import Configuration
+from snowdroughtindex.utils.progress import ProgressTracker, track_progress, monitor_memory
 
 class SWEDataset:
     """
@@ -223,12 +226,14 @@ class SWEDataset:
         month_data = data_preparation.extract_monthly_data(self.data, month, plot)
         return SWEDataset(month_data, self.stations)
     
+    @monitor_memory
     def gap_fill(self, window_days: int = 15, min_obs_corr: int = 10, 
                 min_obs_cdf: int = 5, min_corr: float = 0.7,
                 parallel: bool = None, n_jobs: int = None,
                 memory_efficient: bool = None) -> 'SWEDataset':
         """
-        Perform gap filling on the SWE data.
+        Fill gaps in the SWE data using quantile mapping.
+        Enhanced parallel processing with dynamic chunk sizing and progress tracking.
         
         Parameters
         ----------
@@ -239,7 +244,7 @@ class SWEDataset:
         min_obs_cdf : int, optional
             Minimum number of stations required to calculate a station's cdf, by default 5.
         min_corr : float, optional
-            Minimum correlation value required to keep a donor station, by default 0.7.
+            Minimum correlation coefficient between stations, by default 0.7.
         parallel : bool, optional
             Whether to use parallel processing, by default None (use configuration value).
         n_jobs : int, optional
@@ -276,46 +281,77 @@ class SWEDataset:
         
         # Implement memory-efficient approach
         if memory_efficient:
-            # Process data in smaller chunks to reduce memory usage
             # First, identify stations with gaps
             stations_with_gaps = []
             for col in self.data.columns:
                 if self.data[col].isna().any():
                     stations_with_gaps.append(col)
             
-            # Process stations in batches
-            batch_size = max(1, len(stations_with_gaps) // (4 * (n_jobs if parallel else 1)))
+            # Calculate optimal batch size based on available memory
+            available_memory = psutil.virtual_memory().available
+            data_memory = self.data.memory_usage(deep=True).sum()
+            
+            # Estimate memory needed per station
+            memory_per_station = data_memory / len(self.data.columns)
+            
+            # Calculate optimal batch size (leave 50% memory free for other operations)
+            max_stations_per_batch = int((available_memory * 0.5) / memory_per_station)
+            batch_size = min(max_stations_per_batch, len(stations_with_gaps))
+            
+            if parallel:
+                # Adjust batch size for parallel processing
+                batch_size = max(1, batch_size // (n_jobs if n_jobs > 0 else psutil.cpu_count()))
+            
+            print(f"Using batch size of {batch_size} stations based on available memory")
+            
+            # Initialize progress tracking
+            total_batches = (len(stations_with_gaps) + batch_size - 1) // batch_size
+            progress_tracker = ProgressTracker(
+                total=total_batches,
+                desc="Processing batches",
+                unit="batches",
+                memory_monitoring=True
+            )
+            
             all_gapfilled_data = self.data.copy()
             all_data_type_flags = pd.DataFrame(index=self.data.index, columns=self.data.columns)
             all_donor_stations = {}
             
-            for i in range(0, len(stations_with_gaps), batch_size):
-                batch_stations = stations_with_gaps[i:i+batch_size]
-                print(f"Processing batch {i//batch_size + 1}/{(len(stations_with_gaps) + batch_size - 1)//batch_size}: {len(batch_stations)} stations")
+            try:
+                for i in range(0, len(stations_with_gaps), batch_size):
+                    batch_stations = stations_with_gaps[i:i+batch_size]
+                    
+                    # Create a subset of data with only the stations in this batch and their potential donors
+                    batch_data = self.data[batch_stations].copy()
+                    
+                    # Run gap filling on this batch
+                    batch_gapfilled, batch_flags, batch_donors = gap_filling.qm_gap_filling(
+                        batch_data, window_days, min_obs_corr, min_obs_cdf, min_corr,
+                        parallel=parallel, n_jobs=n_jobs
+                    )
+                    
+                    # Update results
+                    for col in batch_stations:
+                        all_gapfilled_data[col] = batch_gapfilled[col]
+                        all_data_type_flags[col] = batch_flags[col]
+                        if col in batch_donors:
+                            all_donor_stations[col] = batch_donors[col]
+                    
+                    # Free memory
+                    del batch_data, batch_gapfilled, batch_flags, batch_donors
+                    gc.collect()
+                    
+                    # Update progress
+                    progress_tracker.update(1, f"Processed batch {i//batch_size + 1}")
                 
-                # Create a subset of data with only the stations in this batch and their potential donors
-                batch_data = self.data[batch_stations].copy()
+                self.data = all_gapfilled_data
+                self.data_type_flags = all_data_type_flags
+                self.donor_stations = all_donor_stations
                 
-                # Run gap filling on this batch
-                batch_gapfilled, batch_flags, batch_donors = gap_filling.qm_gap_filling(
-                    batch_data, window_days, min_obs_corr, min_obs_cdf, min_corr,
-                    parallel=parallel, n_jobs=n_jobs
-                )
-                
-                # Update results
-                for col in batch_stations:
-                    all_gapfilled_data[col] = batch_gapfilled[col]
-                    all_data_type_flags[col] = batch_flags[col]
-                    if col in batch_donors:
-                        all_donor_stations[col] = batch_donors[col]
-                
-                # Free memory
-                del batch_data, batch_gapfilled, batch_flags, batch_donors
-                gc.collect()
+            except Exception as e:
+                progress_tracker.close()
+                raise RuntimeError(f"Error during gap filling: {str(e)}")
             
-            self.data = all_gapfilled_data
-            self.data_type_flags = all_data_type_flags
-            self.donor_stations = all_donor_stations
         else:
             # Run standard gap filling with or without parallel processing
             gapfilled_data, data_type_flags, donor_stations = gap_filling.qm_gap_filling(

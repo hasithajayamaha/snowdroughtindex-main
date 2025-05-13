@@ -14,6 +14,7 @@ from shapely.geometry import Point
 from sklearn.cluster import KMeans
 import seaborn as sns
 import matplotlib.cm as cm
+from progress_tracker import ProgressTracker
 
 
 def calculate_daily_mean_swe(swe_dataset):
@@ -379,158 +380,166 @@ def classify_snow_drought(data, n_clusters=3, random_state=0):
     return data, kmeans.cluster_centers_, cluster_labels
 
 
+@monitor_memory
 def plot_seasonal_swe_precip(seasonal_means):
     """
-    Plot seasonal mean SWE vs precipitation.
+    Plot seasonal mean SWE and precipitation.
     
     Parameters
     ----------
     seasonal_means : pandas.DataFrame
-        DataFrame with season_year, mean_SWE, and mean_precip columns
-        
-    Returns
-    -------
-    matplotlib.figure.Figure
-        Figure object for the plot
+        DataFrame with season_year and seasonal means for SWE and precipitation
     """
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Create scatter plot with colors based on years
-    scatter = ax.scatter(
-        seasonal_means['mean_precip'],
-        seasonal_means['mean_SWE'],
-        c=seasonal_means['season_year'],
-        cmap='tab20_r'
+    # Initialize progress tracking
+    progress_tracker = ProgressTracker(
+        total=4,  # Number of major steps
+        desc="Plotting seasonal SWE and precipitation",
+        unit="steps",
+        memory_monitoring=True
     )
     
-    # Add trend line
-    z = np.polyfit(seasonal_means['mean_precip'], seasonal_means['mean_SWE'], 1)
-    p = np.poly1d(z)
-    ax.plot(seasonal_means['mean_precip'], p(seasonal_means['mean_precip']), "r--")
-    
-    # Add labels and legend
-    ax.set_xlabel('Precipitation (Seasonal Mean)')
-    ax.set_ylabel('SWE (Seasonal Mean)')
-    ax.set_title('Seasonal Mean SWE vs Precipitation')
-    
-    # Add legend
-    legend = ax.legend(*scatter.legend_elements(num=16), bbox_to_anchor=(1.05, 1), loc='upper left')
-    
-    plt.tight_layout()
-    
-    return fig
+    try:
+        # Step 1: Create figure and axes
+        progress_tracker.update(1, "Setting up plot")
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+        
+        # Step 2: Plot SWE
+        progress_tracker.update(1, "Plotting SWE data")
+        ax1.bar(seasonal_means['season_year'], seasonal_means['mean_SWE'], 
+                color='blue', alpha=0.6, label='Mean SWE')
+        ax1.set_xlabel('Season Year')
+        ax1.set_ylabel('Mean SWE (mm)', color='blue')
+        ax1.tick_params(axis='y', labelcolor='blue')
+        
+        # Step 3: Plot precipitation
+        progress_tracker.update(1, "Plotting precipitation data")
+        ax2 = ax1.twinx()
+        ax2.plot(seasonal_means['season_year'], seasonal_means['mean_precip'], 
+                 color='red', marker='o', label='Mean Precipitation')
+        ax2.set_ylabel('Mean Precipitation (mm)', color='red')
+        ax2.tick_params(axis='y', labelcolor='red')
+        
+        # Step 4: Add title and legend
+        progress_tracker.update(1, "Finalizing plot")
+        plt.title('Seasonal Mean SWE and Precipitation')
+        fig.tight_layout()
+        plt.show()
+        
+    except Exception as e:
+        progress_tracker.close()
+        raise RuntimeError(f"Error during seasonal SWE and precipitation plotting: {str(e)}")
 
 
+@monitor_memory
 def plot_snow_drought_classification(data, cluster_colors=None):
     """
-    Plot snow drought classification based on SWE/P ratio and precipitation anomaly.
+    Plot snow drought classification results.
     
     Parameters
     ----------
     data : pandas.DataFrame
-        DataFrame with cum_P_anom, SWE_P_ratio, and cluster_name columns
-    cluster_colors : dict, optional
-        Dictionary mapping cluster names to colors
-        
-    Returns
-    -------
-    matplotlib.figure.Figure
-        Figure object for the plot
+        DataFrame with season_year and cluster labels
+    cluster_colors : list, optional
+        List of colors for each cluster
     """
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Define default colors if not provided
-    if cluster_colors is None:
-        cluster_colors = {
-            'Warm': 'red',
-            'Dry': 'blue',
-            'Warm & Dry': 'purple',
-            'Normal': 'grey'
-        }
-    
-    # Create scatter plot
-    for cluster_name, color in cluster_colors.items():
-        cluster_data = data[data['cluster_name'] == cluster_name]
-        ax.scatter(
-            cluster_data['cum_P_anom'],
-            cluster_data['SWE_P_ratio'],
-            c=color,
-            label=cluster_name
-        )
-    
-    # Add labels and legend
-    ax.set_xlabel('Cumulative Precipitation Anomaly (mm)')
-    ax.set_ylabel('SWE/P Ratio')
-    ax.set_ylim(bottom=0)
-    ax.set_title('K-means Clustering of Seasonal Data')
-    ax.legend(title='Cluster')
-    
-    plt.tight_layout()
-    
-    return fig
-
-
-def plot_drought_time_series(data, metric, cluster_colors=None, year_range=None):
-    """
-    Plot time series of drought metrics with cluster coloring.
-    
-    Parameters
-    ----------
-    data : pandas.DataFrame
-        DataFrame with season_year, cluster_name, and the specified metric
-    metric : str
-        Column name of the metric to plot
-    cluster_colors : dict, optional
-        Dictionary mapping cluster names to colors
-    year_range : tuple, optional
-        (min_year, max_year) to limit the x-axis range
-        
-    Returns
-    -------
-    matplotlib.figure.Figure
-        Figure object for the plot
-    """
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    # Define default colors if not provided
-    if cluster_colors is None:
-        cluster_colors = {
-            'Warm': 'red',
-            'Dry': 'blue',
-            'Warm & Dry': 'purple',
-            'Normal': 'grey'
-        }
-    
-    # Ensure season_year is integer
-    data['season_year'] = data['season_year'].astype(int)
-    
-    # Create bar plot
-    bars = ax.bar(
-        data['season_year'],
-        data[metric],
-        color=data['cluster_name'].map(cluster_colors)
+    # Initialize progress tracking
+    progress_tracker = ProgressTracker(
+        total=4,  # Number of major steps
+        desc="Plotting snow drought classification",
+        unit="steps",
+        memory_monitoring=True
     )
     
-    # Add labels
-    ax.set_xlabel('Year')
-    ax.set_ylabel(metric)
-    ax.set_title(f'{metric} by Year')
+    try:
+        # Step 1: Create figure and axes
+        progress_tracker.update(1, "Setting up plot")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Step 2: Set default colors if not provided
+        progress_tracker.update(1, "Preparing colors")
+        if cluster_colors is None:
+            cluster_colors = ['red', 'yellow', 'green']  # Default colors for 3 clusters
+        
+        # Step 3: Plot clusters
+        progress_tracker.update(1, "Plotting clusters")
+        for cluster in sorted(data['cluster'].unique()):
+            cluster_data = data[data['cluster'] == cluster]
+            ax.scatter(cluster_data['season_year'], cluster_data['cluster'],
+                      color=cluster_colors[cluster], label=f'Cluster {cluster}')
+        
+        # Step 4: Add labels and legend
+        progress_tracker.update(1, "Finalizing plot")
+        ax.set_xlabel('Season Year')
+        ax.set_ylabel('Cluster')
+        ax.set_title('Snow Drought Classification')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+        
+    except Exception as e:
+        progress_tracker.close()
+        raise RuntimeError(f"Error during snow drought classification plotting: {str(e)}")
+
+
+@monitor_memory
+def plot_drought_time_series(data, metric, cluster_colors=None, year_range=None):
+    """
+    Plot time series of drought metric with cluster colors.
     
-    # Add horizontal line at zero
-    ax.axhline(color='black')
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        DataFrame with season_year, metric values, and cluster labels
+    metric : str
+        Name of the metric to plot
+    cluster_colors : list, optional
+        List of colors for each cluster
+    year_range : tuple, optional
+        Tuple of (start_year, end_year) to limit the plot range
+    """
+    # Initialize progress tracking
+    progress_tracker = ProgressTracker(
+        total=5,  # Number of major steps
+        desc="Plotting drought time series",
+        unit="steps",
+        memory_monitoring=True
+    )
     
-    # Set x-axis range if specified
-    if year_range:
-        ax.set_xlim(year_range)
-    
-    # Add legend
-    for name, color in cluster_colors.items():
-        ax.bar(0, 0, color=color, label=name)
-    ax.legend(title='Cluster')
-    
-    plt.tight_layout()
-    
-    return fig
+    try:
+        # Step 1: Create figure and axes
+        progress_tracker.update(1, "Setting up plot")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Step 2: Set default colors if not provided
+        progress_tracker.update(1, "Preparing colors")
+        if cluster_colors is None:
+            cluster_colors = ['red', 'yellow', 'green']  # Default colors for 3 clusters
+        
+        # Step 3: Filter data by year range if specified
+        progress_tracker.update(1, "Filtering data")
+        if year_range is not None:
+            start_year, end_year = year_range
+            data = data[(data['season_year'] >= start_year) & (data['season_year'] <= end_year)]
+        
+        # Step 4: Plot time series
+        progress_tracker.update(1, "Plotting time series")
+        for cluster in sorted(data['cluster'].unique()):
+            cluster_data = data[data['cluster'] == cluster]
+            ax.plot(cluster_data['season_year'], cluster_data[metric],
+                    color=cluster_colors[cluster], marker='o', label=f'Cluster {cluster}')
+        
+        # Step 5: Add labels and legend
+        progress_tracker.update(1, "Finalizing plot")
+        ax.set_xlabel('Season Year')
+        ax.set_ylabel(metric)
+        ax.set_title(f'Time Series of {metric}')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+        
+    except Exception as e:
+        progress_tracker.close()
+        raise RuntimeError(f"Error during drought time series plotting: {str(e)}")
 
 
 def run_scs_analysis(swe_data, precip_data, station_ids, swe_threshold=15, n_clusters=3):

@@ -14,14 +14,18 @@ from sklearn.metrics import mean_squared_error
 import random
 import datetime
 from matplotlib.figure import Figure
+import psutil
+import gc
 
 def calculate_stations_doy_corr(
     stations_obs: pd.DataFrame,
     window_days: int,
-    min_obs_corr: int
+    min_obs_corr: int,
+    chunk_size: int = 1000
 ) -> Dict[int, pd.DataFrame]:
     """
     Calculate stations' correlations for each day of the year (doy) with a window centered around the doy.
+    Memory-optimized version using chunking and numpy arrays.
     
     Parameters
     ----------
@@ -31,40 +35,80 @@ def calculate_stations_doy_corr(
         Number of days to select data for around a certain doy, to calculate correlations.
     min_obs_corr : int
         Minimum number of overlapping observations required to calculate the correlation between 2 stations.
+    chunk_size : int, optional
+        Number of stations to process in each chunk. Default is 1000.
         
     Returns
     -------
     dict
         Dictionary containing a pandas.DataFrame of stations correlations for each day of year.
     """
-    # Set up the dictionary to save all correlations
+    # Convert DataFrame to numpy array for memory efficiency
+    stations_data = stations_obs.to_numpy(dtype=np.float32)
+    station_names = stations_obs.columns
+    dates = stations_obs.index
+    
+    # Calculate day of year for each date
+    doys = np.array([d.dayofyear for d in dates], dtype=np.int16)
+    
+    # Initialize output dictionary
     stations_doy_corr = {}
-
-    # Duplicate the stations observations DataFrame and add doy column
-    stations_obs_doy = stations_obs.copy()
-    stations_obs_doy['doy'] = stations_obs_doy.index.dayofyear
-
-    # Loop over days of the year
-    for doy in range(1, 366+1):
-        # Calculate the start & end of the data selection window, with caution around the start & end of the calendar year
-        window_start = (doy-window_days) % 366
-        window_start = 366 if window_start == 0 else window_start
-        window_end = (doy+window_days) % 366
-        window_end = 366 if window_end == 0 else window_end
-
-        # Select data for the window of interest
-        if window_start > window_end:
-            data_window = stations_obs_doy[(stations_obs_doy['doy'] >= window_start) | (stations_obs_doy['doy'] <= window_end)]
-        else:
-            data_window = stations_obs_doy[(stations_obs_doy['doy'] >= window_start) & (stations_obs_doy['doy'] <= window_end)]
-
-        # Calculate the Spearman rank-order correlations between stations if the minimum number of observations criterion is met
-        data_window = data_window.drop(columns=['doy'])
-        corr = data_window.corr(method='spearman', min_periods=min_obs_corr)
-
-        # Save correlation for the doy to the dictionary
-        stations_doy_corr[doy] = corr
-
+    
+    # Process stations in chunks to manage memory
+    n_stations = len(station_names)
+    for chunk_start in range(0, n_stations, chunk_size):
+        chunk_end = min(chunk_start + chunk_size, n_stations)
+        chunk_stations = station_names[chunk_start:chunk_end]
+        chunk_data = stations_data[:, chunk_start:chunk_end]
+        
+        # Process each day of year
+        for doy in range(1, 367):
+            # Calculate window indices
+            window_start = (doy - window_days) % 366
+            window_end = (doy + window_days) % 366
+            
+            # Handle year boundary cases
+            if window_start > window_end:
+                mask = (doys >= window_start) | (doys <= window_end)
+            else:
+                mask = (doys >= window_start) & (doys <= window_end)
+            
+            # Get data for this window
+            window_data = chunk_data[mask]
+            
+            # Calculate correlations
+            corr_matrix = np.corrcoef(window_data, rowvar=False)
+            
+            # Create DataFrame for this chunk
+            chunk_corr = pd.DataFrame(
+                corr_matrix,
+                index=chunk_stations,
+                columns=chunk_stations,
+                dtype=np.float32
+            )
+            
+            # Apply minimum observations filter
+            valid_pairs = np.sum(~np.isnan(window_data), axis=0) >= min_obs_corr
+            chunk_corr = chunk_corr.loc[valid_pairs, valid_pairs]
+            
+            # Update or create correlation DataFrame for this doy
+            if doy in stations_doy_corr:
+                stations_doy_corr[doy] = pd.concat([
+                    stations_doy_corr[doy],
+                    chunk_corr
+                ], axis=1)
+            else:
+                stations_doy_corr[doy] = chunk_corr
+        
+        # Free memory
+        del chunk_data, chunk_corr
+        gc.collect()
+        
+        # Monitor memory usage
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        print(f"Memory usage after chunk {chunk_start//chunk_size + 1}: {memory_info.rss / 1024 / 1024:.2f} MB")
+    
     return stations_doy_corr
 
 def quantile_mapping(

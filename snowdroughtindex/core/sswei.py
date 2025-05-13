@@ -15,6 +15,9 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from scipy import integrate
 from scipy.stats import norm
+import psutil
+import gc
+from snowdroughtindex.utils.progress import ProgressTracker, track_progress, monitor_memory
 
 def perturb_zeros(swe_column: pd.Series) -> pd.Series:
     """
@@ -241,58 +244,111 @@ def classify_drought(swei: float) -> str:
     else:
         return "Extremely Wet"
 
+@monitor_memory
 def calculate_sswei(
     daily_mean: pd.DataFrame,
     start_month: int = 11,
     start_day: int = 1,
     end_month: int = 4,
     end_day: int = 30,
-    min_swe: float = 15
+    min_swe: float = 15,
+    chunk_size: int = 1000
 ) -> pd.DataFrame:
     """
-    Calculate the Standardized Snow Water Equivalent Index (SSWEI) from daily mean SWE data.
+    Calculate the Standardized Snow Water Equivalent Index (SSWEI) for each station.
+    Memory-optimized version using chunking and numpy arrays.
     
     Parameters
     ----------
     daily_mean : pandas.DataFrame
-        DataFrame containing daily mean SWE values with 'date' and 'mean_SWE' columns.
+        DataFrame containing daily mean SWE values for each station.
     start_month : int, optional
-        Starting month of the snow season, by default 11 (November).
+        Starting month of the snow season. Default is 11 (November).
     start_day : int, optional
-        Starting day of the snow season, by default 1.
+        Starting day of the snow season. Default is 1.
     end_month : int, optional
-        Ending month of the snow season, by default 4 (April).
+        Ending month of the snow season. Default is 4 (April).
     end_day : int, optional
-        Ending day of the snow season, by default 30.
+        Ending day of the snow season. Default is 30.
     min_swe : float, optional
-        Minimum SWE value to consider as the start of the snow season, by default 15.
+        Minimum SWE value to consider for integration. Default is 15.
+    chunk_size : int, optional
+        Number of stations to process in each chunk. Default is 1000.
         
     Returns
     -------
     pandas.DataFrame
-        DataFrame containing SSWEI values and drought classifications for each season.
+        DataFrame containing SSWEI values for each station.
     """
-    # Prepare seasonal data
-    season_data = prepare_season_data(daily_mean, start_month, start_day, end_month, end_day, min_swe)
+    # Convert DataFrame to numpy array for memory efficiency
+    swe_data = daily_mean.to_numpy(dtype=np.float32)
+    station_names = daily_mean.columns
+    dates = daily_mean.index
     
-    if season_data.empty:
-        return pd.DataFrame()  # Return empty DataFrame if no complete seasons
+    # Initialize output array
+    n_stations = len(station_names)
+    sswei_results = np.zeros((n_stations,), dtype=np.float32)
     
-    # Calculate seasonal integration
-    integrated_data_season = calculate_seasonal_integration(season_data, start_month)
-    
-    # Compute Gringorten probabilities
-    integrated_data_season['Gringorten_probabilities'] = gringorten_probabilities(
-        integrated_data_season['total_SWE_integration']
+    # Initialize progress tracking
+    total_chunks = (n_stations + chunk_size - 1) // chunk_size
+    progress_tracker = ProgressTracker(
+        total=total_chunks,
+        desc="Processing stations",
+        unit="chunks",
+        memory_monitoring=True
     )
     
-    # Compute SSWEI
-    integrated_data_season['SWEI'] = compute_swei(integrated_data_season['Gringorten_probabilities'])
-    
-    # Classify drought conditions
-    integrated_data_season['Drought_Classification'] = integrated_data_season['SWEI'].apply(classify_drought)
-    
-    return integrated_data_season
+    try:
+        # Process stations in chunks
+        for chunk_start in range(0, n_stations, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, n_stations)
+            chunk_stations = station_names[chunk_start:chunk_end]
+            chunk_data = swe_data[:, chunk_start:chunk_end]
+            
+            # Prepare season data for chunk
+            season_data = prepare_season_data(
+                pd.DataFrame(chunk_data, index=dates, columns=chunk_stations),
+                start_month=start_month,
+                start_day=start_day,
+                end_month=end_month,
+                end_day=end_day,
+                min_swe=min_swe
+            )
+            
+            # Calculate seasonal integration for chunk
+            seasonal_integration = calculate_seasonal_integration(
+                season_data,
+                start_month=start_month
+            )
+            
+            # Calculate probabilities and SSWEI for chunk
+            for i, station in enumerate(chunk_stations):
+                if station in seasonal_integration.columns:
+                    values = seasonal_integration[station].dropna().values
+                    if len(values) > 0:
+                        probs = gringorten_probabilities(values)
+                        swei = compute_swei(probs)
+                        sswei_results[chunk_start + i] = swei[-1] if len(swei) > 0 else np.nan
+            
+            # Free memory
+            del season_data, seasonal_integration
+            gc.collect()
+            
+            # Update progress
+            progress_tracker.update(1, f"Processed chunk {chunk_start//chunk_size + 1}")
+        
+        # Create final DataFrame
+        sswei_df = pd.DataFrame(
+            {'SSWEI': sswei_results},
+            index=station_names,
+            dtype=np.float32
+        )
+        
+        return sswei_df
+        
+    except Exception as e:
+        progress_tracker.close()
+        raise RuntimeError(f"Error during SSWEI calculation: {str(e)}")
 
 def plot_sswei(
     sswei_data: pd.DataFrame,
