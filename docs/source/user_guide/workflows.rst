@@ -11,5 +11,8 @@ Each guide explains the purpose, steps, and implementation details of a specific
    workflows/gap_filling
    workflows/sswei_calculation
    workflows/drought_classification
+   workflows/heldmyer_classification
    workflows/scs_analysis
    workflows/case_study
+   workflows/dem_shapefile_elevation
+   workflows/workflow_comparison

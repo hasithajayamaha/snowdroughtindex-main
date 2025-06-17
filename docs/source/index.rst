@@ -29,6 +29,7 @@ This documentation includes API references, methodology guides, and usage exampl
 
    methodology/sswei
    methodology/gap_filling
+   methodology/heldmyer_classification
    methodology/case_study
 
 .. toctree::

@@ -7,9 +7,11 @@ A Python package for analyzing and classifying snow drought conditions using var
 This package provides tools for analyzing snow water equivalent (SWE) data, calculating snow drought indices, and classifying drought conditions. It implements several methodologies including:
 
 - Standardized Snow Water Equivalent Index (SSWEI) based on Huning & AghaKouchak methodology
-- Snow drought classification according to Heldmyer et al. 2022
+- Snow drought classification according to Heldmyer et al. (2024)
 - SWE/P ratio analysis for drought classification
 - Gap filling of SWE data using quantile mapping
+- DEM and shapefile integration for elevation-based analysis
+- Comprehensive workflow comparison tools
 
 ## Features
 
@@ -133,6 +135,22 @@ def classify_drought(swei):
 Integrated_data['Drought_Classification'] = Integrated_data['SWEI'].apply(classify_drought)
 ```
 
+## Workflows
+
+The package includes several documented workflows to guide users through common analysis tasks:
+
+1. **Data Preparation**: Loading and preprocessing SWE data
+2. **Gap Filling**: Filling missing data in SWE time series
+3. **SSWEI Calculation**: Computing the Standardized Snow Water Equivalent Index
+4. **Drought Classification**: Classifying drought conditions based on SSWEI
+5. **Heldmyer Classification**: Implementing the Heldmyer et al. (2024) classification methodology
+6. **SCS Analysis**: Analyzing snow-to-precipitation ratios
+7. **Case Studies**: Applying methodologies to specific regions
+8. **DEM and Shapefile Integration**: Incorporating elevation data into analysis
+9. **Workflow Comparison**: Comparing different analysis approaches
+
+Detailed documentation for each workflow is available in the [documentation](docs/source/user_guide/workflows.rst).
+
 ## Case Studies
 
 The package includes several case studies demonstrating the application of these methodologies:
@@ -160,8 +178,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Walimunige Nadie Senali Rupasinghe
 
+## Documentation
+
+Comprehensive documentation is available at [docs/](docs/). The documentation includes:
+
+- Installation instructions
+- Quickstart guide
+- Detailed workflow guides
+- API reference
+- Methodology explanations
+- Examples
+
 ## References
 
 - Huning, L. S., & AghaKouchak, A. (2020). Global snow drought hot spots and characteristics. Proceedings of the National Academy of Sciences, 117(33), 19753-19759.
-- Heldmyer, A., Livneh, B., Molotch, N. P., & Harpold, A. A. (2022). Sensitivity of snowpack storage efficiency to precipitation and temperature using a regional snow drought index. Hydrology and Earth System Sciences, 26(22), 5721-5735.
+- Heldmyer, A. J., Livneh, B., Molotch, N. P., & Harpold, A. A. (2024). Classifying snow drought types: A new approach to understanding snow drought mechanisms. Journal of Hydrometeorology.
 - Tang, G., Clark, M. P., & Papalexiou, S. M. (2021). SC-earth: A station-based serially complete earth dataset from 1950 to 2019. Journal of Climate, 34(16), 6493-6511.
