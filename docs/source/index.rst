@@ -22,6 +22,7 @@ This documentation includes API references, methodology guides, and usage exampl
    user_guide/examples
    user_guide/migration
    user_guide/cli
+   roadmap
 
 .. toctree::
    :maxdepth: 2
