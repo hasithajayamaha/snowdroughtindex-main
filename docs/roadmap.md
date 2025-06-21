@@ -8,10 +8,10 @@ This roadmap outlines the planned development trajectory for the Snow Drought In
 
 ### Code Optimization and Performance
 
-- **Vectorize core calculations**: Improve performance of SSWEI and Heldmyer classification algorithms
-- **Implement parallel processing**: Add support for multi-core processing for computationally intensive operations
-- **Memory optimization**: Reduce memory footprint for large dataset processing
-- **Benchmark performance**: Create benchmarks to track performance improvements
+- **Vectorize Core Calculations**: Optimize SSWEI and Heldmyer classification algorithms using NumPy for faster array operations.
+- **Implement Parallel Processing**: Add support for multi-core processing with libraries like Dask or multiprocessing for computationally intensive tasks such as gap filling and drought analysis.
+- **Memory Optimization**: Reduce memory footprint by implementing chunked data processing for large datasets in `dataset.py`.
+- **Benchmark Performance**: Develop comprehensive benchmarks to track performance improvements across key modules, with results published in documentation.
 
 ### Documentation Enhancements
 
@@ -34,7 +34,7 @@ This roadmap outlines the planned development trajectory for the Snow Drought In
 - **Additional drought indices**: Implement complementary drought indices (e.g., SPI, SPEI)
 - **Machine learning integration**: Add ML-based drought prediction capabilities
 - **Climate model integration**: Support for climate model outputs (CMIP6)
-- **Real-time monitoring**: Develop capabilities for near-real-time snow drought monitoring
+- **Real-Time Monitoring**: Develop capabilities for near-real-time snow drought monitoring by integrating APIs from data providers like NOAA (for SNODAS and precipitation data) and USGS (for SWE via NWIS and SNOTEL), enabling daily or hourly updates in `data_preparation.py`.
 
 ### Data Handling
 
@@ -45,7 +45,7 @@ This roadmap outlines the planned development trajectory for the Snow Drought In
 
 ### Visualization
 
-- **Interactive dashboards**: Develop Plotly/Dash-based interactive visualizations
+- **Interactive Dashboards**: Develop Plotly/Dash-based interactive visualizations for dynamic exploration of drought data, including heatmaps and time series plots in `sswei_class.py` and `drought_analysis.py`, with features like zooming, tooltips, and data filtering.
 - **GIS integration**: Better integration with GIS tools (QGIS, ArcGIS)
 - **Custom plotting themes**: Themed visualizations for publications and presentations
 - **Animation capabilities**: Time-series animations of drought evolution
@@ -55,9 +55,10 @@ This roadmap outlines the planned development trajectory for the Snow Drought In
 ### Ecosystem Expansion
 
 - **Web API**: Develop a REST API for remote access to package functionality
-- **Web application**: Create a web-based interface for non-technical users
-- **Mobile app**: Develop a simplified mobile interface for field researchers
-- **Plugin system**: Architecture for community-contributed extensions
+- **Web Application**: Create a web-based interface for non-technical users
+- **Professional Website**: Develop a comprehensive public website similar to HydroSHEDS (https://www.hydrosheds.org/) to serve as the primary online presence for the Snow Drought Index project. The website will feature interactive data visualizations, detailed documentation, downloadable datasets, user guides, case studies, and a portal for community engagement, aiming to increase visibility and accessibility for researchers, policymakers, and the public.
+- **Mobile App**: Develop a simplified mobile interface for field researchers
+- **Plugin System**: Architecture for community-contributed extensions
 
 ### Advanced Analytics
 
@@ -112,13 +113,15 @@ This roadmap outlines the planned development trajectory for the Snow Drought In
 
 | Timeframe | Key Milestones |
 |-----------|----------------|
-| Q3 2025   | Release v1.0 with optimized core algorithms |
-| Q4 2025   | Complete documentation enhancements |
-| Q1 2026   | Add support for additional drought indices |
-| Q2 2026   | Release interactive visualization dashboard |
-| Q3 2026   | Implement machine learning integration |
-| Q4 2026   | Launch web API and application |
-| Q2 2027   | Release v2.0 with advanced analytics |
+| Q3 2025   | Release v1.0 with optimized core algorithms (vectorization and parallel processing in `sswei.py` and `drought_analysis.py`) |
+| Q4 2025   | Complete documentation enhancements with interactive Jupyter notebooks and video tutorials |
+| Q1 2026   | Add support for additional drought indices (SPI, SPEI) in `drought_indices.py` |
+| Q2 2026   | Release interactive visualization dashboard using Plotly/Dash for enhanced data exploration |
+| Q3 2026   | Implement real-time monitoring capabilities with NOAA and USGS API integration |
+| Q4 2026   | Implement machine learning integration for drought prediction in `gap_filling.py` and `drought_analysis.py` |
+| Q1 2027   | Launch web API and initial web application for broader accessibility |
+| Q2 2027   | Launch professional website similar to HydroSHEDS with interactive visualizations and community portal |
+| Q3 2027   | Release v2.0 with advanced analytics (causal analysis, ensemble forecasting) |
 
 ## Prioritization Criteria
 
@@ -138,6 +141,16 @@ This roadmap is a living document that will be reviewed and updated regularly ba
 - Emerging research directions in snow drought science
 - Technological advancements in scientific computing
 - Available resources and funding
+
+### Encouraging Community Input
+
+To ensure the roadmap reflects the needs of our diverse user base, we encourage specific feedback on the following:
+- Prioritization of features and improvements based on user impact and scientific value.
+- Suggestions for additional data sources or formats to support in `data_preparation.py`.
+- Ideas for visualization enhancements or specific interactive tools in `sswei_class.py` and `drought_analysis.py`.
+- Requirements for real-time monitoring or operational use cases to guide API integrations.
+
+Feedback can be submitted via GitHub issues labeled "roadmap-feedback" or through discussions on the user forum once established.
 
 ## How to Contribute
 
