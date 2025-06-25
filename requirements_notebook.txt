@@ -18,3 +18,5 @@ logging>=0.4.9.6
 # Optional but recommended
 dask>=2021.6.0
 scipy>=1.7.0
+fastparquet>=0.8.0
+pyarrow>=5.0.0
