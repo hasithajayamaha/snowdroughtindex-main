@@ -51,8 +51,21 @@ class ElevationDataFilter:
         # Handle legacy constructor calls from notebook
         if elevation_dir is not None and casr_dir is not None:
             # Legacy mode: assume we're working with flattened CSV files in a standard location
-            self.elevation_data_dir = Path("data/output_data/elevation")
-            print("Legacy constructor detected. Using flattened CSV files from data/output_data/elevation")
+            # Try to find the project root and construct the correct path
+            current_dir = Path.cwd()
+            if "notebooks" in str(current_dir):
+                # We're in a notebook subdirectory, go up to project root
+                project_root = current_dir.parent.parent
+            else:
+                # We're already in project root
+                project_root = current_dir
+            
+            self.elevation_data_dir = project_root / "data" / "output_data" / "elevation"
+            print(f"Legacy constructor detected. Using flattened CSV files from {self.elevation_data_dir}")
+            print(f"Directory exists: {self.elevation_data_dir.exists()}")
+            if self.elevation_data_dir.exists():
+                csv_files = list(self.elevation_data_dir.glob("*.csv"))
+                print(f"CSV files found: {[f.name for f in csv_files]}")
         elif elevation_data_dir is not None:
             # New mode: direct path to CSV files
             self.elevation_data_dir = Path(elevation_data_dir)
@@ -512,8 +525,12 @@ class ElevationDataFilter:
         # Handle legacy parameters from notebook
         if sample_points is not None or sample_time is not None:
             logger.info("Legacy parameters detected. Using flattened CSV approach.")
-            if sample_time and not sample_size:
+            # For full processing, ignore sample parameters unless explicitly set
+            if sample_time and sample_time > 0 and not sample_size:
                 sample_size = sample_time  # Use sample_time as sample_size for compatibility
+            elif sample_points == 0 and sample_time == 0:
+                # Process all data when both are 0
+                sample_size = None
         try:
             # Find CSV files
             self.precipitation_file, self.swe_file = self.find_elevation_csv_files()
