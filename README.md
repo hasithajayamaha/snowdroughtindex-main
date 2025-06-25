@@ -34,28 +34,127 @@ This package provides tools for analyzing snow water equivalent (SWE) data, calc
 
 ## Installation
 
-Clone the repository:
+### Quick Setup (Recommended)
+
+Clone the repository and run the automated setup:
 
 ```bash
 git clone https://github.com/username/snowdroughtindex.git
 cd snowdroughtindex
+python setup.py
+```
+
+This will automatically:
+1. Create a virtual environment in `./venv/`
+2. Activate the virtual environment
+3. Upgrade pip to the latest version
+4. Install all required dependencies from multiple requirements files
+5. Install the package in development mode
+
+### Manual Setup
+
+If you prefer manual installation:
+
+```bash
+git clone https://github.com/username/snowdroughtindex.git
+cd snowdroughtindex
+
+# Create and activate virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate.bat
+# On Unix/Mac:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+pip install -r requirements_extraction.txt
+pip install -r requirements_notebook.txt
+
+# Install package in development mode
+pip install -e .
+```
+
+### Setup Options
+
+The enhanced setup.py provides several installation modes:
+
+- `python setup.py` - Full automated setup with virtual environment (default)
+- `python setup.py install` - Full automated setup with virtual environment
+- `python setup.py develop` - Standard setuptools development mode
+- `python setup.py --help` - Show detailed usage instructions
+
+### Virtual Environment Activation
+
+After setup, activate your virtual environment:
+
+**Windows:**
+```bash
+venv\Scripts\activate.bat
+```
+
+**PowerShell:**
+```bash
+venv\Scripts\Activate.ps1
+```
+
+**Unix/Mac:**
+```bash
+source venv/bin/activate
+```
+
+### Verify Installation
+
+Test that the package is installed correctly:
+
+```python
+python -c "import snowdroughtindex; print('Package imported successfully!')"
 ```
 
 ## Dependencies
 
-The package requires the following Python libraries:
+The package uses three separate requirements files to manage dependencies:
 
-- numpy
-- pandas
-- xarray
-- matplotlib
-- scipy
-- geopandas
-- seaborn
-- scikit-learn
-- netCDF4
-- statsmodels
-- properscoring
+### Core Dependencies (requirements.txt)
+- numpy>=1.20.0
+- pandas>=1.3.0
+- xarray>=0.19.0
+- matplotlib>=3.4.0
+- scipy>=1.7.0
+- geopandas>=0.10.0
+- seaborn>=0.11.0
+- scikit-learn>=1.0.0
+- netCDF4>=1.5.0
+- h5py>=3.7.0
+- statsmodels>=0.13.0
+- properscoring>=0.1
+- rasterio>=1.2.0
+- shapely>=1.8.0
+
+### Extraction Tools (requirements_extraction.txt)
+- numpy>=1.21.0
+- pandas>=1.3.0
+- xarray>=0.19.0
+- geopandas>=0.10.0
+- shapely>=1.8.0
+- netcdf4>=1.5.0
+- pyproj>=3.2.0
+
+### Notebook Environment (requirements_notebook.txt)
+- numpy<2.0.0 (compatibility constraint)
+- pandas>=1.3.0
+- xarray>=0.19.0
+- matplotlib>=3.3.0
+- netcdf4>=1.5.0
+- h5netcdf>=0.8.0
+- pathlib2>=2.3.0 (Python <3.4)
+- logging>=0.4.9.6
+- dask>=2021.6.0
+- scipy>=1.7.0
+
+**Note:** The notebook requirements include NumPy version constraints (<2.0.0) to ensure compatibility with Jupyter notebooks and avoid NumPy 2.x compatibility issues.
 
 ## Usage
 
