@@ -16,6 +16,7 @@ import datetime
 from matplotlib.figure import Figure
 import psutil
 import gc
+import matplotlib.patches as mpatches
 
 def calculate_stations_doy_corr(
     stations_obs: pd.DataFrame,
@@ -643,3 +644,169 @@ def plots_artificial_gap_evaluation(
     plt.tight_layout()
 
     return fig
+
+###
+
+def data_availability_monthly_plots_1(SWE_stations, original_SWE_data, gapfilled_SWE_data, flag):
+
+    """Calculating and plotting the % of SWE stations available on the first day of each month of each year.
+
+    Keyword arguments:
+    ------------------
+    - SWE_stations: Pandas GeoDataFrame of all SWE stations
+    - original_SWE_data: xarray DataArray of the original SWE observations
+    - gapfilled_SWE_data: xarray DataArray of the SWE observations after gap filling
+    - flag: Flag to indicate if gap filled data was provided (1) or not (0). In the case that it is provided, a comparison plot will be made to compare data availability in the original data vs the gap filled data
+
+    Returns:
+    --------
+    - Bar chart timeseries of SWE stations available on the first day of each month of each year
+
+    """
+
+    # Initialize plot
+    fig, axs = plt.subplots(6, 2, sharex=True, sharey=True, figsize=(14,8))
+    elem = -1
+    column = 0
+
+    # Loop over months
+    for m in range(1,12+1):
+
+        # controls for plotting on right subplot (i.e., month)
+        elem += 1
+        if elem == 6:
+            column += 1
+            elem = 0
+
+        # for SWE data with gap filling
+        if flag == 1:
+
+            # extract data on the first of the month m
+            data_month_gapfilled = gapfilled_SWE_data.sel(station_id=SWE_stations.station_id.values, time=( (gapfilled_SWE_data['time.month'] == m) & (gapfilled_SWE_data['time.day'] == 1) ))
+
+            # count the % of stations with data on those dates
+            data_month_gapfilled_count = data_month_gapfilled.count(dim='station_id') / len(SWE_stations) * 100
+
+            # plot bar chart of available data
+            axs[elem,column].bar(data_month_gapfilled_count['time.year'], data_month_gapfilled_count.data, color='r', alpha=.5)
+
+        # same process as above but for original SWE data
+        data_month = original_SWE_data.sel(station_id=SWE_stations.station_id.values, time=( (original_SWE_data['time.month'] == m) & (original_SWE_data['time.day'] == 1) ))
+        data_month_count = data_month.count(dim='station_id') / len(SWE_stations) * 100
+        axs[elem,column].bar(data_month_count['time.year'], data_month_count.data, color='b')
+
+        # add plot labels
+        if elem == 5 and column == 0:
+            axs[elem,column].set_ylabel('% of SWE stations \n with data in basin')
+        month_name = datetime.datetime.strptime(str(m), "%m").strftime("%b")
+        axs[elem,column].set_title('1st '+month_name, fontweight='bold')
+
+        if flag == 1:
+            bluepatch = mpatches.Patch(color='b', label='original data')
+            redpatch = mpatches.Patch(color='r', alpha=.5, label='after gap filling')
+            plt.legend(handles=[bluepatch, redpatch])
+
+    plt.tight_layout()
+
+    return fig
+
+###
+
+def data_availability_monthly_plots_2(SWE_data):
+
+    """Creating bar chart subplots of the days with SWE observations around the 1st day of each month.
+
+    Keyword arguments:
+    ------------------
+    - SWE_data: Pandas DataFrame containing the SWE stations observations
+
+    Returns:
+    --------
+    - Bar chart subplots of the days with SWE observations around the 1st day of each month
+
+    """
+
+    # Initialize plot
+    fig, axs = plt.subplots(6, 2, sharex=False, sharey=True, figsize=(8,16))
+    elem = -1
+    column = 0
+
+    # Add day of year (doy) to test basin SWE observations Pandas DataFrame
+    SWE_data_with_doy = SWE_data.copy()
+    SWE_data_with_doy['doy'] = SWE_data_with_doy.index.dayofyear
+
+    # Remove automatic stations as they distract the analysis
+    manual_stations = [s for s in SWE_data_with_doy.columns if s[-1] != 'P']
+    SWE_data_with_doy_manual = SWE_data_with_doy[manual_stations]
+
+    # Define the doys of 1st of each month
+    doys_first_month = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+
+    # Loop over months
+    for m in range(1,12+1):
+
+        # controls for plotting on right subplot
+        elem += 1
+        if elem == 6:
+            column += 1
+            elem = 0
+
+        # calculate the start & end of the data selection window, with caution around the start & end of the calendar year
+        window_start = (doys_first_month[m-1]-15)%366
+        if window_start == 0:
+            window_start = 365
+        window_end = (doys_first_month[m-1]+15)%366
+        if window_end == 0 or window_end == 365:
+            window_end = 366
+
+        # select SWE observations within window
+        if window_start > window_end:
+            data_window = SWE_data_with_doy_manual[(SWE_data_with_doy_manual['doy']>=window_start) | (SWE_data_with_doy_manual['doy'] <= window_end)]
+        else:
+            data_window = SWE_data_with_doy_manual[(SWE_data_with_doy_manual['doy']>=window_start) & (SWE_data_with_doy_manual['doy'] <= window_end)]
+
+        # drop dates or stations with no data at all
+        data_window = data_window.dropna(axis=0, how='all')
+        data_window = data_window.dropna(axis=1, how='all')
+
+        # count total number of stations with data on each doy
+        stations_cols = [c for c in data_window.columns if 'doy' not in c]
+        data_stations_window = data_window[stations_cols]
+        data_count_window = data_stations_window.count(axis=1)
+
+        # create xticks to plot the data for each doy
+        if window_start > window_end:
+            xticks = list(np.arange(window_start,365+1))+list(np.arange(1,window_end+1))
+        else:
+            xticks = list(np.arange(window_start,window_end+1))
+        xticks_plot = np.arange(len(xticks))
+
+        # save the data for the right doy
+        data_count_plot = [0]*len(xticks)
+        for x in range(len(data_window.index)):
+            doy = data_window.iloc[x]['doy']
+            if doy == 366:
+                doy = 365
+            data_count_plot[xticks.index(doy)] += data_count_window.iloc[x]
+
+        # plot data
+        axs[elem,column].bar(xticks_plot, data_count_plot, color='b')
+        axs[elem,column].set_xticks([xticks_plot[0],xticks_plot[15],xticks_plot[-1]])
+        axs[elem,column].set_xticklabels([xticks[0],doys_first_month[m-1],xticks[-1]])
+
+        # add plot labels
+        if elem == 5 and column == 0:
+            axs[elem,column].set_ylabel('# of SWE obs.')
+            axs[elem,column].set_xlabel('DOY')
+
+        if elem == 5 and column == 1:
+            axs[elem,column].set_xlabel('DOY')
+
+        month_name = datetime.datetime.strptime(str(m), "%m").strftime("%b")
+        axs[elem,column].set_title('1st '+month_name+' +/- 15 days', fontweight='bold')
+
+    plt.tight_layout()
+
+    return fig
+
+###
