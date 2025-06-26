@@ -129,24 +129,40 @@ class OptimizedElevationDataExtractor:
             ds = xr.open_dataset(nc_file)
             logger.info(f"Dataset variables: {list(ds.data_vars)}")
             logger.info(f"Dataset dimensions: {dict(ds.dims)}")
+            logger.info(f"Dataset coordinates: {list(ds.coords)}")
             
-            # Get coordinate information
+            # Prioritize actual geographic coordinates over rotated coordinates
+            has_2d_coords = False
+            lon_coord, lat_coord = None, None
+            
+            # Check for 2D geographic coordinate arrays first (preferred)
             if 'lon' in ds.coords and 'lat' in ds.coords:
-                lon_coord, lat_coord = 'lon', 'lat'
+                if ds.lon.ndim == 2 and ds.lat.ndim == 2:
+                    lon_coord, lat_coord = 'lon', 'lat'
+                    has_2d_coords = True
+                    logger.info("Found 2D geographic coordinates (lon, lat) - using actual grid coordinates")
+                elif ds.lon.ndim == 1 and ds.lat.ndim == 1:
+                    lon_coord, lat_coord = 'lon', 'lat'
+                    logger.info("Found 1D geographic coordinates (lon, lat)")
             elif 'longitude' in ds.coords and 'latitude' in ds.coords:
-                lon_coord, lat_coord = 'longitude', 'latitude'
+                if ds.longitude.ndim == 2 and ds.latitude.ndim == 2:
+                    lon_coord, lat_coord = 'longitude', 'latitude'
+                    has_2d_coords = True
+                    logger.info("Found 2D geographic coordinates (longitude, latitude) - using actual grid coordinates")
+                elif ds.longitude.ndim == 1 and ds.latitude.ndim == 1:
+                    lon_coord, lat_coord = 'longitude', 'latitude'
+                    logger.info("Found 1D geographic coordinates (longitude, latitude)")
+            # Fall back to rotated coordinates only if no geographic coordinates found
             elif 'rlon' in ds.coords and 'rlat' in ds.coords:
                 lon_coord, lat_coord = 'rlon', 'rlat'
+                logger.info("Using rotated coordinates (rlon, rlat) as fallback")
             else:
                 logger.warning(f"Could not identify coordinate variables in {nc_file.name}")
+                logger.warning(f"Available coordinates: {list(ds.coords)}")
                 return None
             
             # Convert points to same CRS as NetCDF if needed
             points_proj = points_gdf.copy()
-            
-            # If the NetCDF uses rotated coordinates, we might need to handle projection
-            if lon_coord == 'rlon' and lat_coord == 'rlat':
-                logger.info("Detected rotated coordinates - using nearest neighbor approach")
             
             # Extract coordinates from points
             if points_proj.crs and points_proj.crs.to_string() != 'EPSG:4326':
@@ -194,9 +210,52 @@ class OptimizedElevationDataExtractor:
             
             for i, (lon, lat) in enumerate(zip(point_lons, point_lats)):
                 try:
-                    # Find nearest grid point
-                    if lon_coord == 'rlon' and lat_coord == 'rlat':
-                        # For rotated coordinates, find nearest grid point
+                    # Find nearest grid point and extract actual geographic coordinates
+                    if has_2d_coords and (lon_coord in ['lon', 'longitude'] and lat_coord in ['lat', 'latitude']):
+                        # Handle 2D geographic coordinate arrays (preferred method)
+                        # Convert longitude from 0-360 to -180-180 if needed for target
+                        target_lon = lon if lon >= -180 and lon <= 180 else (lon - 360 if lon > 180 else lon + 360)
+                        
+                        # Get 2D coordinate arrays
+                        lon_2d = ds[lon_coord].values
+                        lat_2d = ds[lat_coord].values
+                        
+                        # Convert lon_2d to -180-180 range if needed for consistency
+                        lon_2d_adj = np.where(lon_2d > 180, lon_2d - 360, lon_2d)
+                        
+                        # Calculate distance to all grid points
+                        dist = np.sqrt((lon_2d_adj - target_lon)**2 + (lat_2d - lat)**2)
+                        
+                        # Find indices of minimum distance
+                        min_idx = np.unravel_index(np.argmin(dist), dist.shape)
+                        
+                        # Get the dimension names for indexing
+                        if 'rlat' in ds.dims and 'rlon' in ds.dims:
+                            rlat_idx, rlon_idx = min_idx
+                            point_data = ds.isel(rlat=rlat_idx, rlon=rlon_idx)
+                        elif 'y' in ds.dims and 'x' in ds.dims:
+                            y_idx, x_idx = min_idx
+                            point_data = ds.isel(y=y_idx, x=x_idx)
+                        else:
+                            # Try to infer dimension names from coordinate shape
+                            coord_dims = ds[lon_coord].dims
+                            if len(coord_dims) == 2:
+                                dim1, dim2 = coord_dims
+                                point_data = ds.isel({dim1: min_idx[0], dim2: min_idx[1]})
+                            else:
+                                logger.warning(f"Could not determine dimension names for point {i}")
+                                continue
+                        
+                        # Extract the actual geographic coordinates at this grid point
+                        actual_grid_lon = float(lon_2d[min_idx])
+                        actual_grid_lat = float(lat_2d[min_idx])
+                        
+                        # Convert back to consistent longitude range if needed
+                        if actual_grid_lon > 180:
+                            actual_grid_lon -= 360
+                        
+                    elif lon_coord == 'rlon' and lat_coord == 'rlat':
+                        # Fallback to rotated coordinates if no geographic coordinates available
                         rlon_vals = ds[lon_coord].values
                         rlat_vals = ds[lat_coord].values
                         
@@ -206,37 +265,30 @@ class OptimizedElevationDataExtractor:
                         
                         # Select using indices
                         point_data = ds.isel({lon_coord: rlon_idx, lat_coord: rlat_idx})
-                    elif 'lon' in ds.coords and 'lat' in ds.coords and ds.lon.ndim == 2:
-                        # Handle 2D coordinate arrays (common in rotated grids)
-                        # Convert longitude from 0-360 to -180-180 if needed
-                        target_lon = lon if lon < 0 else lon - 360
                         
-                        # Find nearest grid point using 2D coordinates
-                        lon_2d = ds.lon.values
-                        lat_2d = ds.lat.values
+                        # Use rotated coordinates as grid coordinates (fallback)
+                        actual_grid_lon = float(point_data[lon_coord].values)
+                        actual_grid_lat = float(point_data[lat_coord].values)
                         
-                        # Convert lon_2d to -180-180 range if needed
-                        lon_2d_adj = np.where(lon_2d > 180, lon_2d - 360, lon_2d)
-                        
-                        # Calculate distance to all grid points
-                        dist = np.sqrt((lon_2d_adj - target_lon)**2 + (lat_2d - lat)**2)
-                        
-                        # Find indices of minimum distance
-                        min_idx = np.unravel_index(np.argmin(dist), dist.shape)
-                        rlat_idx, rlon_idx = min_idx
-                        
-                        # Select using indices
-                        point_data = ds.isel(rlat=rlat_idx, rlon=rlon_idx)
-                    else:
+                    elif ds[lon_coord].ndim == 1 and ds[lat_coord].ndim == 1:
+                        # Handle 1D coordinate arrays
                         point_data = ds.sel({lon_coord: lon, lat_coord: lat}, method='nearest')
+                        actual_grid_lon = float(point_data[lon_coord].values)
+                        actual_grid_lat = float(point_data[lat_coord].values)
+                        
+                    else:
+                        # Generic fallback
+                        point_data = ds.sel({lon_coord: lon, lat_coord: lat}, method='nearest')
+                        actual_grid_lon = float(point_data[lon_coord].values)
+                        actual_grid_lat = float(point_data[lat_coord].values)
                     
                     # Extract all variables
                     point_dict = {
                         'point_id': i,
                         'original_lon': lon,
                         'original_lat': lat,
-                        'grid_lon': float(point_data[lon_coord].values),
-                        'grid_lat': float(point_data[lat_coord].values),
+                        'grid_lon': actual_grid_lon,
+                        'grid_lat': actual_grid_lat,
                     }
                     
                     # Add elevation-related data if available
