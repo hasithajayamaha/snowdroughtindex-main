@@ -1,0 +1,31 @@
+{
+  "analysis_timestamp": "2025-06-30T14:37:24.505049",
+  "netcdf_file": "../../data/output_data/merged_2d/merged_casr_elevation_2d.nc",
+  "shapefile": "../../data/input_data/Elevation/Bow_elevation_combined.shp",
+  "netcdf_analysis": {
+    "dimensions": {
+      "elevation_points": 13,
+      "window_lat": 3,
+      "window_lon": 3,
+      "time": 12857
+    },
+    "variables": [
+      "lon_windows",
+      "lat_windows",
+      "original_lon",
+      "original_lat",
+      "elevation_mean",
+      "precipitation",
+      "swe"
+    ],
+    "coordinates": [
+      "elevation_points",
+      "window_lat",
+      "window_lon",
+      "time"
+    ],
+    "attributes": {
+      "title": "Merged CaSR precipitation and SWE data at elevation points",
+      "description": "Combined 2D arrays of precipitation and snow water equivalent",
+      "window_size": "3x3",
+      "n_elevation_points": 
