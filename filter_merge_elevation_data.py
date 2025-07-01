@@ -3,10 +3,12 @@
 Filter and merge elevation data for non-null precipitation and snow water equivalent values.
 
 This script:
-1. Loads pre-extracted elevation data from CSV files
+1. Loads pre-extracted elevation data from NetCDF spatial windows or CSV files
 2. Merges precipitation and SWE data at elevation points
 3. Filters for non-null values in both variables
 4. Provides analysis and saves results
+
+Enhanced to handle both NetCDF spatial windows and legacy CSV formats.
 """
 
 import os
@@ -16,6 +18,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
+import xarray as xr
 from datetime import datetime
 import warnings
 
@@ -81,7 +84,272 @@ class ElevationDataFilter:
         # Store data
         self.precipitation_df = None
         self.swe_df = None
+        self.precipitation_ds = None
+        self.swe_ds = None
         
+    def detect_data_format(self):
+        """Detect whether we have NetCDF spatial windows or CSV files."""
+        nc_files = list(self.elevation_data_dir.glob("*.nc"))
+        csv_files = list(self.elevation_data_dir.glob("*.csv"))
+        
+        # Check for NetCDF spatial window files
+        precip_nc = [f for f in nc_files if "A_PR24_SFC" in f.name and "elevation_windows" in f.name]
+        swe_nc = [f for f in nc_files if "P_SWE_LAND" in f.name and "elevation_windows" in f.name]
+        
+        # Check for flattened CSV files
+        precip_csv = [f for f in csv_files if "A_PR24_SFC" in f.name and "flattened" in f.name]
+        swe_csv = [f for f in csv_files if "P_SWE_LAND" in f.name and "flattened" in f.name]
+        
+        # Check for legacy CSV files
+        legacy_precip_csv = [f for f in csv_files if "A_PR24_SFC" in f.name and "flattened" not in f.name]
+        legacy_swe_csv = [f for f in csv_files if "P_SWE_LAND" in f.name and "flattened" not in f.name]
+        
+        if precip_nc and swe_nc:
+            logger.info("Detected NetCDF spatial window format")
+            return 'netcdf', precip_nc[0], swe_nc[0]
+        elif precip_csv and swe_csv:
+            logger.info("Detected flattened CSV format from spatial windows")
+            return 'csv_flattened', precip_csv[0], swe_csv[0]
+        elif legacy_precip_csv and legacy_swe_csv:
+            logger.info("Detected legacy CSV format")
+            return 'csv_legacy', legacy_precip_csv[0], legacy_swe_csv[0]
+        else:
+            raise FileNotFoundError(
+                f"Could not find matching precipitation and SWE files in {self.elevation_data_dir}. "
+                f"Found NetCDF: {len(precip_nc)} precip, {len(swe_nc)} SWE. "
+                f"Found CSV: {len(precip_csv + legacy_precip_csv)} precip, {len(swe_csv + legacy_swe_csv)} SWE."
+            )
+    
+    def find_elevation_netcdf_files(self):
+        """Find precipitation and SWE NetCDF files in the elevation data directory."""
+        nc_files = list(self.elevation_data_dir.glob("*.nc"))
+        
+        precip_file = None
+        swe_file = None
+        
+        for f in nc_files:
+            if "A_PR24_SFC" in f.name and "elevation_windows" in f.name:
+                precip_file = f
+            elif "P_SWE_LAND" in f.name and "elevation_windows" in f.name:
+                swe_file = f
+        
+        if not precip_file:
+            raise FileNotFoundError(f"No precipitation NetCDF file found in {self.elevation_data_dir}")
+        if not swe_file:
+            raise FileNotFoundError(f"No SWE NetCDF file found in {self.elevation_data_dir}")
+            
+        logger.info(f"Found precipitation file: {precip_file.name}")
+        logger.info(f"Found SWE file: {swe_file.name}")
+        
+        return precip_file, swe_file
+    
+    def load_netcdf_data(self, nc_file, variable_name, aggregation_method='center_point'):
+        """
+        Load data from NetCDF spatial window file.
+        
+        Parameters:
+        -----------
+        nc_file : Path
+            Path to NetCDF file
+        variable_name : str
+            Name of the variable being loaded
+        aggregation_method : str
+            How to aggregate spatial windows ('center_point', 'mean', 'median')
+            
+        Returns:
+        --------
+        pandas.DataFrame
+            Flattened data for merging
+        """
+        logger.info(f"Loading {variable_name} data from {nc_file.name}...")
+        logger.info(f"Aggregation method: {aggregation_method}")
+        
+        try:
+            # Load NetCDF dataset
+            ds = xr.open_dataset(nc_file)
+            logger.info(f"Dataset dimensions: {dict(ds.dims)}")
+            logger.info(f"Dataset variables: {list(ds.data_vars)}")
+            
+            # Find the climate data variable
+            data_vars = [var for var in ds.data_vars 
+                        if var not in ['lon_windows', 'lat_windows', 'original_lon', 'original_lat',
+                                     'window_center_lon', 'window_center_lat', 'elevation_mean',
+                                     'elevation_min', 'elevation_max', 'elevation_median']]
+            
+            if not data_vars:
+                raise ValueError(f"No climate data variables found in {nc_file.name}")
+            
+            climate_var = data_vars[0]  # Take the first climate variable
+            logger.info(f"Using climate variable: {climate_var}")
+            
+            # Get dimensions
+            n_points = ds.dims['elevation_points']
+            window_size = ds.dims['window_lat']
+            n_times = ds.dims.get('time', 1)
+            
+            logger.info(f"Processing {n_points} elevation points with {window_size}x{window_size} windows")
+            
+            records = []
+            
+            for point_idx in range(n_points):
+                # Get point metadata
+                orig_lon = float(ds['original_lon'][point_idx].values)
+                orig_lat = float(ds['original_lat'][point_idx].values)
+                
+                # Get elevation data
+                elev_mean = float(ds['elevation_mean'][point_idx].values) if not np.isnan(ds['elevation_mean'][point_idx].values) else None
+                elev_min = float(ds['elevation_min'][point_idx].values) if not np.isnan(ds['elevation_min'][point_idx].values) else None
+                elev_max = float(ds['elevation_max'][point_idx].values) if not np.isnan(ds['elevation_max'][point_idx].values) else None
+                elev_median = float(ds['elevation_median'][point_idx].values) if not np.isnan(ds['elevation_median'][point_idx].values) else None
+                
+                # Get coordinate windows
+                lon_window = ds['lon_windows'][point_idx, :, :].values
+                lat_window = ds['lat_windows'][point_idx, :, :].values
+                
+                # Apply aggregation method
+                if aggregation_method == 'center_point':
+                    # Use center point of the window
+                    center_idx = window_size // 2
+                    grid_lon = float(lon_window[center_idx, center_idx])
+                    grid_lat = float(lat_window[center_idx, center_idx])
+                    
+                    if np.isnan(grid_lon) or np.isnan(grid_lat):
+                        logger.warning(f"Center point has NaN coordinates for point {point_idx}, skipping")
+                        continue
+                    
+                    # Extract time series for center point
+                    if 'time' in ds.dims:
+                        for t, time_val in enumerate(ds.time.values):
+                            data_val = ds[climate_var][t, point_idx, center_idx, center_idx].values
+                            
+                            if not np.isnan(data_val):
+                                record = {
+                                    'point_id': point_idx,
+                                    'original_lon': orig_lon,
+                                    'original_lat': orig_lat,
+                                    'grid_lon': grid_lon,
+                                    'grid_lat': grid_lat,
+                                    'time': pd.to_datetime(time_val),
+                                    'elevation_mean': elev_mean,
+                                    'elevation_min': elev_min,
+                                    'elevation_max': elev_max,
+                                    'elevation_median': elev_median,
+                                    climate_var: float(data_val)
+                                }
+                                records.append(record)
+                    else:
+                        # Static data
+                        data_val = ds[climate_var][point_idx, center_idx, center_idx].values
+                        if not np.isnan(data_val):
+                            record = {
+                                'point_id': point_idx,
+                                'original_lon': orig_lon,
+                                'original_lat': orig_lat,
+                                'grid_lon': grid_lon,
+                                'grid_lat': grid_lat,
+                                'elevation_mean': elev_mean,
+                                'elevation_min': elev_min,
+                                'elevation_max': elev_max,
+                                'elevation_median': elev_median,
+                                climate_var: float(data_val)
+                            }
+                            records.append(record)
+                
+                elif aggregation_method in ['mean', 'median']:
+                    # Aggregate across the spatial window
+                    valid_mask = ~(np.isnan(lon_window) | np.isnan(lat_window))
+                    
+                    if not valid_mask.any():
+                        logger.warning(f"No valid grid cells in window for point {point_idx}, skipping")
+                        continue
+                    
+                    # Use center coordinates as representative
+                    center_idx = window_size // 2
+                    grid_lon = float(lon_window[center_idx, center_idx])
+                    grid_lat = float(lat_window[center_idx, center_idx])
+                    
+                    if 'time' in ds.dims:
+                        for t, time_val in enumerate(ds.time.values):
+                            window_data = ds[climate_var][t, point_idx, :, :].values
+                            valid_data = window_data[valid_mask]
+                            
+                            if len(valid_data) > 0:
+                                if aggregation_method == 'mean':
+                                    agg_val = np.nanmean(valid_data)
+                                else:  # median
+                                    agg_val = np.nanmedian(valid_data)
+                                
+                                if not np.isnan(agg_val):
+                                    record = {
+                                        'point_id': point_idx,
+                                        'original_lon': orig_lon,
+                                        'original_lat': orig_lat,
+                                        'grid_lon': grid_lon,
+                                        'grid_lat': grid_lat,
+                                        'time': pd.to_datetime(time_val),
+                                        'elevation_mean': elev_mean,
+                                        'elevation_min': elev_min,
+                                        'elevation_max': elev_max,
+                                        'elevation_median': elev_median,
+                                        climate_var: float(agg_val)
+                                    }
+                                    records.append(record)
+                    else:
+                        # Static data
+                        window_data = ds[climate_var][point_idx, :, :].values
+                        valid_data = window_data[valid_mask]
+                        
+                        if len(valid_data) > 0:
+                            if aggregation_method == 'mean':
+                                agg_val = np.nanmean(valid_data)
+                            else:  # median
+                                agg_val = np.nanmedian(valid_data)
+                            
+                            if not np.isnan(agg_val):
+                                record = {
+                                    'point_id': point_idx,
+                                    'original_lon': orig_lon,
+                                    'original_lat': orig_lat,
+                                    'grid_lon': grid_lon,
+                                    'grid_lat': grid_lat,
+                                    'elevation_mean': elev_mean,
+                                    'elevation_min': elev_min,
+                                    'elevation_max': elev_max,
+                                    'elevation_median': elev_median,
+                                    climate_var: float(agg_val)
+                                }
+                                records.append(record)
+            
+            ds.close()
+            
+            if not records:
+                logger.warning(f"No valid records extracted from {nc_file.name}")
+                return pd.DataFrame()
+            
+            df = pd.DataFrame(records)
+            logger.info(f"Extracted {len(df):,} records for {variable_name}")
+            logger.info(f"Data columns: {list(df.columns)}")
+            
+            # Show data statistics
+            if climate_var in df.columns:
+                null_count = df[climate_var].isna().sum()
+                logger.info(f"Null values in {climate_var}: {null_count:,} ({null_count/len(df)*100:.1f}%)")
+                
+                non_null_data = df[climate_var].dropna()
+                if len(non_null_data) > 0:
+                    logger.info(f"{climate_var} range: {non_null_data.min():.3f} - {non_null_data.max():.3f}")
+            
+            # Show time range
+            if 'time' in df.columns:
+                time_range = f"{df['time'].min()} to {df['time'].max()}"
+                logger.info(f"Time range: {time_range}")
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error loading {nc_file.name}: {e}")
+            raise
+    
     def find_elevation_csv_files(self):
         """Find precipitation and SWE CSV files in the elevation data directory."""
         csv_files = list(self.elevation_data_dir.glob("*.csv"))
@@ -507,9 +775,9 @@ class ElevationDataFilter:
         
         print("="*70)
     
-    def process(self, sample_size=None, chunk_size=None, sample_points=None, sample_time=None):
+    def process(self, sample_size=None, chunk_size=None, sample_points=None, sample_time=None, aggregation_method='center_point'):
         """
-        Main processing function.
+        Main processing function that automatically detects and handles both NetCDF and CSV formats.
         
         Parameters:
         -----------
@@ -521,38 +789,69 @@ class ElevationDataFilter:
             Legacy parameter (ignored - for notebook compatibility)
         sample_time : int, optional
             Legacy parameter (ignored - for notebook compatibility)
+        aggregation_method : str
+            How to aggregate spatial windows for NetCDF files ('center_point', 'mean', 'median')
         """
         # Handle legacy parameters from notebook
         if sample_points is not None or sample_time is not None:
-            logger.info("Legacy parameters detected. Using flattened CSV approach.")
+            logger.info("Legacy parameters detected.")
             # For full processing, ignore sample parameters unless explicitly set
             if sample_time and sample_time > 0 and not sample_size:
                 sample_size = sample_time  # Use sample_time as sample_size for compatibility
             elif sample_points == 0 and sample_time == 0:
                 # Process all data when both are 0
                 sample_size = None
+        
         try:
-            # Find CSV files
-            self.precipitation_file, self.swe_file = self.find_elevation_csv_files()
+            # Detect data format and get file paths
+            data_format, precip_file, swe_file = self.detect_data_format()
             
-            # Load precipitation data
-            self.precipitation_df = self.load_csv_data(
-                self.precipitation_file, 
-                'precipitation',
-                sample_size=sample_size,
-                chunk_size=chunk_size
-            )
+            self.precipitation_file = precip_file
+            self.swe_file = swe_file
             
-            # Load SWE data
-            self.swe_df = self.load_csv_data(
-                self.swe_file, 
-                'swe',
-                sample_size=sample_size,
-                chunk_size=chunk_size
-            )
+            # Load data based on detected format
+            if data_format == 'netcdf':
+                logger.info("Processing NetCDF spatial window files...")
+                
+                # Load precipitation data from NetCDF
+                self.precipitation_df = self.load_netcdf_data(
+                    precip_file, 
+                    'precipitation',
+                    aggregation_method=aggregation_method
+                )
+                
+                # Load SWE data from NetCDF
+                self.swe_df = self.load_netcdf_data(
+                    swe_file, 
+                    'swe',
+                    aggregation_method=aggregation_method
+                )
+                
+            else:  # CSV formats (flattened or legacy)
+                logger.info(f"Processing {data_format} files...")
+                
+                # Load precipitation data from CSV
+                self.precipitation_df = self.load_csv_data(
+                    precip_file, 
+                    'precipitation',
+                    sample_size=sample_size,
+                    chunk_size=chunk_size
+                )
+                
+                # Load SWE data from CSV
+                self.swe_df = self.load_csv_data(
+                    swe_file, 
+                    'swe',
+                    sample_size=sample_size,
+                    chunk_size=chunk_size
+                )
             
             if self.precipitation_df is None or self.swe_df is None:
                 logger.error("Failed to load data")
+                return False
+            
+            if len(self.precipitation_df) == 0 or len(self.swe_df) == 0:
+                logger.error("Loaded datasets are empty")
                 return False
             
             # Filter and merge data
@@ -575,10 +874,15 @@ class ElevationDataFilter:
             # Save results
             self.save_results(filtered_df, stats_df, overall_stats, format='both')
             
+            logger.info(f"Successfully processed {data_format} format data")
+            logger.info(f"Final dataset: {len(filtered_df):,} records from {filtered_df['point_id'].nunique()} elevation points")
+            
             return True
             
         except Exception as e:
             logger.error(f"Processing failed: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return False
 
 
