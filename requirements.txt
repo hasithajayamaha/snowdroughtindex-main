@@ -12,3 +12,5 @@ statsmodels>=0.13.0
 properscoring>=0.1
 rasterio>=1.2.0
 shapely>=1.8.0
+pyyaml>=6.0
+tqdm>=4.60.0
