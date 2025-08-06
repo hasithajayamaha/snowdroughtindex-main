@@ -19,6 +19,7 @@ This documentation includes API references, methodology guides, and usage exampl
    user_guide/advanced_usage
    user_guide/performance_optimization
    user_guide/workflows
+   user_guide/tools/index
    user_guide/examples
    user_guide/migration
    user_guide/cli
