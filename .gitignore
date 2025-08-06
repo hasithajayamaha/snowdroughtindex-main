@@ -186,5 +186,25 @@ tasks.json
 tasks/ 
 notebooks/workflows/workspace.code-workspace
 
-# Data files
+# Scientific data files - large datasets that shouldn't be in version control
+*.nc
+*.hdf5
+*.h5
+
+# Generated output directories and files
+notebook_output_plots/
+output_plots/
+data/output_data/
+data/input_data/
+
+# Generated analysis and result files
+*.csv
+# But keep important configuration/setup files
+!requirements.txt
+!setup.py
+
+# Workspace and IDE files
+*.code-workspace
+
+# Data files (keep this as fallback)
 data/
