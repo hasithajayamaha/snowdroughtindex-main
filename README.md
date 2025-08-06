@@ -175,6 +175,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Walimunige Nadie Senali Rupasinghe
 
+## Examples
+
+The package includes a comprehensive set of example scripts organized by category in the `examples/` directory:
+
+- **`examples/basic/`** - Basic usage examples and getting started scripts
+- **`examples/data_analysis/`** - Data analysis workflows and visualization examples
+- **`examples/data_processing/`** - Data preprocessing, combination, and optimization examples
+- **`examples/advanced/`** - Advanced usage patterns and optimization techniques
+
+See the [Examples README](examples/README.md) for detailed descriptions and usage instructions for each example script.
+
 ## Documentation
 
 Comprehensive documentation is available at [docs/](docs/). The documentation includes:
@@ -184,7 +195,7 @@ Comprehensive documentation is available at [docs/](docs/). The documentation in
 - Detailed workflow guides
 - API reference
 - Methodology explanations
-- Examples
+- Examples and tutorials
 
 ## References
 

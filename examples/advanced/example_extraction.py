@@ -6,7 +6,7 @@ This script demonstrates how to use the ElevationDataExtractor class
 to extract CaSR data at elevation point locations.
 """
 
-from extract_elevation_data import ElevationDataExtractor
+from examples.data_processing.extract_elevation_data_optimized import OptimizedElevationDataExtractor as ElevationDataExtractor
 import logging
 
 # Enable logging to see progress
