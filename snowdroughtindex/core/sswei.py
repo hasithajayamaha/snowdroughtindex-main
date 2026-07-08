@@ -291,7 +291,7 @@ def calculate_sswei(
     
     # Initialize output array
     n_stations = len(station_names)
-    sswei_results = np.zeros((n_stations,), dtype=np.float32)
+    sswei_results = np.full((n_stations,), np.nan, dtype=np.float32)
     
     # Initialize progress tracking
     total_chunks = (n_stations + chunk_size - 1) // chunk_size
